@@ -19,6 +19,27 @@ if not req then
 end
 
 -- ==========================================
+-- CONFIGURE BLACK BUBBLE CHAT
+-- ==========================================
+pcall(function()
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+        local bubbleConfig = TextChatService:FindFirstChild("BubbleChatConfiguration") 
+        if not bubbleConfig then
+            bubbleConfig = Instance.new("BubbleChatConfiguration")
+            bubbleConfig.Parent = TextChatService
+        end
+        bubbleConfig.BackgroundColor3 = Color3.fromRGB(15, 15, 15) -- Very dark grey/black
+        bubbleConfig.TextColor3 = Color3.fromRGB(255, 255, 255)
+    else
+        -- Legacy Bubble Chat overrides
+        ChatService:SetBubbleChatSettings({
+            BackgroundColor3 = Color3.fromRGB(15, 15, 15),
+            TextColor3 = Color3.fromRGB(255, 255, 255)
+        })
+    end
+end)
+
+-- ==========================================
 -- SERVER & STATE CONFIGURATION
 -- ==========================================
 local SERVER_URL = "https://my-roblox-private-chat.onrender.com"
@@ -29,8 +50,9 @@ local Admin = { kausarali2 = true, cutie143198 = true }
 local Staff = {}
 
 local chatMode = "global" -- "global" or "server"
-local privateTarget = nil
-local knownUsers = {} -- Cache for partial username matching
+local privateTargetName = nil -- Used for routing logic (Unique)
+local privateTargetDisplay = nil -- Used for UI/Display
+local knownUsers = {} -- Cache for partial matching: { username = { name = "User", display = "Display" } }
 
 -- ==========================================
 -- UI CREATION: MAIN DRAGGABLE BOX
@@ -250,31 +272,40 @@ local function getHexColorForUser(username)
     return string.format("#%02X%02X%02X", color.R * 255, color.G * 255, color.B * 255)
 end
 
--- Tries to find a full username from a partial string
-local function getFullUsername(partialName)
+-- Tries to find both Username and DisplayName from a partial string
+local function getTargetInfo(partialName)
     partialName = string.lower(partialName)
     
     -- Check local game players first
     for _, p in ipairs(Players:GetPlayers()) do
         if string.sub(string.lower(p.Name), 1, #partialName) == partialName or string.sub(string.lower(p.DisplayName), 1, #partialName) == partialName then
-            return p.Name
+            return { name = p.Name, display = p.DisplayName }
         end
     end
     
     -- Check global cached users
-    for lowerName, realName in pairs(knownUsers) do
-        if string.sub(lowerName, 1, #partialName) == partialName then
-            return realName
+    for lowerName, data in pairs(knownUsers) do
+        if string.sub(lowerName, 1, #partialName) == partialName or string.sub(string.lower(data.display), 1, #partialName) == partialName then
+            return data
         end
     end
     
     return nil
 end
 
+-- Get DisplayName safely for chatbox output
+local function getDisplayNameSafe(username)
+    local p = Players:FindFirstChild(username)
+    if p then return p.DisplayName end
+    local cached = knownUsers[string.lower(username)]
+    if cached then return cached.display end
+    return username -- Fallback to username if display name is unknown
+end
+
 -- Updates layout based on private button visibility
 local function updateInputLayout()
-    if privateTarget then
-        PrivateBtn.Text = " [🔐 " .. privateTarget .. "] "
+    if privateTargetName then
+        PrivateBtn.Text = " [🔐 " .. privateTargetDisplay .. "] "
         local tagWidth = TextService:GetTextSize(PrivateBtn.Text, 12, Enum.Font.GothamBold, Vector2.new(1000, 30)).X + 10
         PrivateBtn.Size = UDim2.new(0, tagWidth, 1, -6)
         PrivateBtn.Visible = true
@@ -289,11 +320,19 @@ local function updateInputLayout()
 end
 
 -- Set and remove private chat targets
-local function setPrivateTarget(username)
-    if username then
-        privateTarget = getFullUsername(username) or username 
+local function setPrivateTarget(query)
+    if query then
+        local info = getTargetInfo(query)
+        if info then
+            privateTargetName = info.name
+            privateTargetDisplay = info.display
+        else
+            privateTargetName = query
+            privateTargetDisplay = query
+        end
     else
-        privateTarget = nil
+        privateTargetName = nil
+        privateTargetDisplay = nil
     end
     updateInputLayout()
 end
@@ -305,10 +344,8 @@ end)
 
 -- Core message display function
 local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
-    local displayName = userName
-    local speaker = Players:FindFirstChild(userName)
+    local displayName = getDisplayNameSafe(userName)
 
-    if speaker then displayName = speaker.DisplayName end
     if Admin[userName:lower()] then displayName = "[Admin] " .. displayName end
     if Staff[userName:lower()] then displayName = "[Staff] " .. displayName end
 
@@ -321,10 +358,13 @@ local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
     if privateUserTarget then
         msgColor = "#FF9632"
         color3Msg = Color3.fromRGB(255, 150, 50)
+        
+        local targetDisplayName = getDisplayNameSafe(privateUserTarget)
+        
         if isPrivateSender then
-            tagText = "[🔐To " .. privateUserTarget .. "]:"
+            tagText = "[🔐To " .. targetDisplayName .. "]:"
         else
-            tagText = "[🔐From " .. privateUserTarget .. "]:"
+            tagText = "[🔐From " .. targetDisplayName .. "]:"
         end
     end
 
@@ -344,7 +384,6 @@ local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
     end
 end
 
--- Fallback to manually render local Bubble Chats 
 local function displayBubble(userName, msg)
     local speaker = Players:FindFirstChild(userName)
     if not speaker or not speaker.Character then return end
@@ -367,7 +406,6 @@ end
 TextBox:GetPropertyChangedSignal("Text"):Connect(function()
     local t = TextBox.Text
 
-    -- Emoji shortcut
     if string.match(t, "!e$") then
         TextBox.Text = string.sub(t, 1, -3)
         if not UserInputService.TouchEnabled then
@@ -376,7 +414,6 @@ TextBox:GetPropertyChangedSignal("Text"):Connect(function()
         return
     end
 
-    -- Private Chat Setup
     local pMatch = string.match(t, "^!p%s+(%w+)%s+$")
     if pMatch then
         TextBox.Text = ""
@@ -401,16 +438,17 @@ local function sendPrivateMessage()
         return
     end
 
-    -- Embed routing right into the text itself (as requested)
+    -- Routing logic depends on USERNAME uniqueness, not display name
     local finalMsg = text
-    if privateTarget then
-        finalMsg = "( 🔐 " .. LocalPlayer.Name .. " Private " .. privateTarget .. ") " .. text
+    if privateTargetName then
+        finalMsg = "( 🔐 " .. LocalPlayer.Name .. " Private " .. privateTargetName .. ") " .. text
     end
 
     TextBox.PlaceholderText = " Sending..."
     task.spawn(function()
         local payloadObj = {
             user = LocalPlayer.Name,
+            displayName = LocalPlayer.DisplayName, -- Passing DisplayName for cache
             msg = finalMsg,
             jobId = game.JobId
         }
@@ -458,17 +496,16 @@ local function pollMessages()
                 if m.time > lastSyncTime then
                     lastSyncTime = m.time
                     
-                    -- Cache users for !p partial matching
-                    knownUsers[string.lower(m.user)] = m.user
+                    -- Cache users for partial matching and UI (Safely grabbing DisplayName)
+                    local cachedDisplay = m.displayName or m.user
+                    knownUsers[string.lower(m.user)] = { name = m.user, display = cachedDisplay }
                     
                     if m.hidden or m.msg == "Joined" then continue end
                     if chatMode == "server" and m.jobId ~= game.JobId then continue end
                     
-                    -- Extract the explicitly attached string format
                     local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
                     
                     if pSender and pTarget then
-                        -- Handle string based routing
                         if LocalPlayer.Name == pSender then
                             displayMessage(m.user, pMsg, pTarget, true)
                             displayBubble(m.user, pMsg)
@@ -476,7 +513,6 @@ local function pollMessages()
                             displayMessage(m.user, pMsg, pSender, false)
                             displayBubble(m.user, pMsg)
                         end
-                        -- Everyone else ignores this completely
                         continue 
                     end
                     
@@ -496,7 +532,13 @@ task.spawn(function()
         req({
             Url = SERVER_URL .. "/send", Method = "POST",
             Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-            Body = HttpService:JSONEncode({ user = LocalPlayer.Name, msg = "Joined", jobId = game.JobId, hidden = true })
+            Body = HttpService:JSONEncode({ 
+                user = LocalPlayer.Name, 
+                displayName = LocalPlayer.DisplayName, 
+                msg = "Joined", 
+                jobId = game.JobId, 
+                hidden = true 
+            })
         })
     end)
 end)
@@ -504,7 +546,6 @@ end)
 task.spawn(pollMessages)
 
 task.spawn(function()
-    while task.wait(300) do
         local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p username ' for private chat ✅.\n3) ' !server ', ' !global ' switch chat type."
         displayMessage("System", sysMsg, nil, false)
     end
