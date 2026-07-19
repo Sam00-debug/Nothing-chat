@@ -7,7 +7,7 @@ local StarterGui = game:GetService("StarterGui")
 local TextChatService = game:GetService("TextChatService")
 local TextService = game:GetService("TextService")
 local UserInputService = game:GetService("UserInputService")
-local TeleportService = game:GetService("TeleportService")
+local ChatService = game:GetService("Chat")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -30,7 +30,7 @@ local Staff = {}
 
 local chatMode = "global" -- "global" or "server"
 local privateTarget = nil
-local playerLocations = {} -- Cache for placeId and jobId
+local knownUsers = {} -- Cache for partial username matching
 
 -- ==========================================
 -- UI CREATION: MAIN DRAGGABLE BOX
@@ -52,6 +52,7 @@ MainFrame.Active = true
 local UICorner = Instance.new("UICorner", MainFrame)
 UICorner.CornerRadius = UDim.new(0, 6)
 
+-- Drag Handle
 local DragHandle = Instance.new("TextButton", MainFrame)
 DragHandle.Size = UDim2.new(0, 30, 1, 0)
 DragHandle.BackgroundTransparency = 1
@@ -60,22 +61,23 @@ DragHandle.TextColor3 = Color3.fromRGB(150, 150, 150)
 DragHandle.TextSize = 16
 DragHandle.Font = Enum.Font.GothamBold
 
--- Private Chat UI Tag (Inside TextBox)
-local PrivateTag = Instance.new("TextButton", MainFrame)
-PrivateTag.Size = UDim2.new(0, 0, 1, -6)
-PrivateTag.Position = UDim2.new(0, 35, 0, 3)
-PrivateTag.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-PrivateTag.TextColor3 = Color3.fromRGB(255, 200, 50)
-PrivateTag.Font = Enum.Font.GothamBold
-PrivateTag.TextSize = 12
-PrivateTag.Visible = false
-PrivateTag.AutoButtonColor = true
-local PrivateCorner = Instance.new("UICorner", PrivateTag)
+-- Dynamic Private Chat Button (Beside Input)
+local PrivateBtn = Instance.new("TextButton", MainFrame)
+PrivateBtn.Size = UDim2.new(0, 0, 1, -6)
+PrivateBtn.Position = UDim2.new(0, 30, 0, 3)
+PrivateBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+PrivateBtn.TextColor3 = Color3.fromRGB(255, 200, 50)
+PrivateBtn.Font = Enum.Font.GothamBold
+PrivateBtn.TextSize = 12
+PrivateBtn.Visible = false
+PrivateBtn.AutoButtonColor = true
+local PrivateCorner = Instance.new("UICorner", PrivateBtn)
 PrivateCorner.CornerRadius = UDim.new(0, 4)
 
+-- Text Input
 local TextBox = Instance.new("TextBox", MainFrame)
-TextBox.Size = UDim2.new(1, -45, 1, 0)
-TextBox.Position = UDim2.new(0, 25, 0, 0)
+TextBox.Size = UDim2.new(1, -50, 1, 0)
+TextBox.Position = UDim2.new(0, 30, 0, 0)
 TextBox.BackgroundTransparency = 1
 TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 TextBox.PlaceholderText = " press ; to type.."
@@ -88,6 +90,7 @@ TextBox.TextXAlignment = Enum.TextXAlignment.Left
 local UIPadding = Instance.new("UIPadding", TextBox)
 UIPadding.PaddingLeft = UDim.new(0, 5)
 
+-- Resize Handle
 local ResizeHandle = Instance.new("TextButton", MainFrame)
 ResizeHandle.Size = UDim2.new(0, 20, 0, 20)
 ResizeHandle.Position = UDim2.new(1, 0, 1, 0)
@@ -99,7 +102,7 @@ ResizeHandle.TextSize = 12
 ResizeHandle.Font = Enum.Font.Gotham
 
 -- ==========================================
--- EMOJI MENU CREATION (WITH TITLE & DRAG)
+-- EMOJI MENU CREATION
 -- ==========================================
 local EmojiFrame = Instance.new("Frame", ScreenGui)
 EmojiFrame.Name = "EmojiPanel"
@@ -112,7 +115,6 @@ EmojiFrame.Active = true
 local EmojiCorner = Instance.new("UICorner", EmojiFrame)
 EmojiCorner.CornerRadius = UDim.new(0, 8)
 
--- Title Bar for Emojis
 local EmojiTopBar = Instance.new("Frame", EmojiFrame)
 EmojiTopBar.Size = UDim2.new(1, 0, 0, 30)
 EmojiTopBar.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
@@ -252,46 +254,57 @@ end
 local function getFullUsername(partialName)
     partialName = string.lower(partialName)
     
-    -- Check players in the current game
+    -- Check local game players first
     for _, p in ipairs(Players:GetPlayers()) do
         if string.sub(string.lower(p.Name), 1, #partialName) == partialName or string.sub(string.lower(p.DisplayName), 1, #partialName) == partialName then
             return p.Name
         end
     end
     
-    -- Check cached remote players
-    for name, _ in pairs(playerLocations) do
-        if string.sub(string.lower(name), 1, #partialName) == partialName then
-            return name
+    -- Check global cached users
+    for lowerName, realName in pairs(knownUsers) do
+        if string.sub(lowerName, 1, #partialName) == partialName then
+            return realName
         end
     end
     
-    return nil -- Return nil if no match found
+    return nil
 end
 
--- Function to handle private chat targeting UI updates
-local function setPrivateTarget(username)
-    if username then
-        local matchedName = getFullUsername(username) or username -- Fallbacks to what they typed if not found
-        privateTarget = matchedName
-        PrivateTag.Text = " [🔐To " .. matchedName .. "] "
-        local tagWidth = TextService:GetTextSize(PrivateTag.Text, 12, Enum.Font.GothamBold, Vector2.new(1000, 30)).X + 10
-        PrivateTag.Size = UDim2.new(0, tagWidth, 1, -6)
-        PrivateTag.Visible = true
-        UIPadding.PaddingLeft = UDim.new(0, tagWidth + 10)
+-- Updates layout based on private button visibility
+local function updateInputLayout()
+    if privateTarget then
+        PrivateBtn.Text = " [🔐 " .. privateTarget .. "] "
+        local tagWidth = TextService:GetTextSize(PrivateBtn.Text, 12, Enum.Font.GothamBold, Vector2.new(1000, 30)).X + 10
+        PrivateBtn.Size = UDim2.new(0, tagWidth, 1, -6)
+        PrivateBtn.Visible = true
+        
+        TextBox.Position = UDim2.new(0, 30 + tagWidth + 5, 0, 0)
+        TextBox.Size = UDim2.new(1, -(30 + tagWidth + 5 + 20), 1, 0)
     else
-        privateTarget = nil
-        PrivateTag.Visible = false
-        UIPadding.PaddingLeft = UDim.new(0, 5)
+        PrivateBtn.Visible = false
+        TextBox.Position = UDim2.new(0, 30, 0, 0)
+        TextBox.Size = UDim2.new(1, -50, 1, 0)
     end
 end
 
--- Clear private chat on tag click
-PrivateTag.MouseButton1Click:Connect(function()
+-- Set and remove private chat targets
+local function setPrivateTarget(username)
+    if username then
+        privateTarget = getFullUsername(username) or username 
+    else
+        privateTarget = nil
+    end
+    updateInputLayout()
+end
+
+-- Destroy (Hide) Target when clicked
+PrivateBtn.MouseButton1Click:Connect(function()
     setPrivateTarget(nil)
 end)
 
-local function displayMessage(userName, msg, privateTargetName)
+-- Core message display function
+local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
     local displayName = userName
     local speaker = Players:FindFirstChild(userName)
 
@@ -300,33 +313,52 @@ local function displayMessage(userName, msg, privateTargetName)
     if Staff[userName:lower()] then displayName = "[Staff] " .. displayName end
 
     local hexColor = getHexColorForUser(userName)
-    local prefix = "💬 "
+    local msgColor = "#FFFF00"
+    local color3Msg = Color3.fromRGB(255, 255, 0)
     
-    -- Adjust formatting for Private Messages
-    if privateTargetName then
-        if userName == LocalPlayer.Name then
-            prefix = "[🔐To " .. privateTargetName .. "] "
+    -- Format specific Private Chat displays
+    local tagText = "💬 " .. displayName .. ":"
+    if privateUserTarget then
+        msgColor = "#FF9632"
+        color3Msg = Color3.fromRGB(255, 150, 50)
+        if isPrivateSender then
+            tagText = "[🔐To " .. privateUserTarget .. "]:"
         else
-            prefix = "[🔐From " .. userName .. "] "
+            tagText = "[🔐From " .. privateUserTarget .. "]:"
         end
     end
 
     if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
-        local msgColor = privateTargetName and "#FF9632" or "#FFFF00"
-        local formattedText = string.format("<font color='%s'><b>%s%s:</b></font> <font color='%s'><b>%s</b></font>", hexColor, prefix, displayName, msgColor, msg)
-        
+        local formattedText = string.format("<font color='%s'><b>%s</b></font> <font color='%s'><b>%s</b></font>", hexColor, tagText, msgColor, msg)
         local channel = TextChatService.TextChannels:FindFirstChild("RBXSystem")
         if channel then channel:DisplaySystemMessage(formattedText) end
     else
         pcall(function()
             StarterGui:SetCore("ChatMakeSystemMessage", {
-                Text = prefix .. displayName .. ": " .. msg,
-                Color = privateTargetName and Color3.fromRGB(255, 150, 50) or Color3.fromRGB(255, 255, 0),
+                Text = tagText .. " " .. msg,
+                Color = color3Msg,
                 Font = Enum.Font.SourceSansBold,
                 FontSize = Enum.FontSize.Size18
             })
         end)
     end
+end
+
+-- Fallback to manually render local Bubble Chats 
+local function displayBubble(userName, msg)
+    local speaker = Players:FindFirstChild(userName)
+    if not speaker or not speaker.Character then return end
+
+    pcall(function()
+        if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+            TextChatService:DisplayBubble(speaker.Character, msg)
+        else
+            local head = speaker.Character:FindFirstChild("Head")
+            if head then
+                ChatService:Chat(head, msg, Enum.ChatColor.White)
+            end
+        end
+    end)
 end
 
 -- ==========================================
@@ -335,7 +367,7 @@ end
 TextBox:GetPropertyChangedSignal("Text"):Connect(function()
     local t = TextBox.Text
 
-    -- Emoji shortcut (ignored on touch screens)
+    -- Emoji shortcut
     if string.match(t, "!e$") then
         TextBox.Text = string.sub(t, 1, -3)
         if not UserInputService.TouchEnabled then
@@ -344,7 +376,7 @@ TextBox:GetPropertyChangedSignal("Text"):Connect(function()
         return
     end
 
-    -- Quick Private Chat Setup (now with partial matching)
+    -- Private Chat Setup
     local pMatch = string.match(t, "^!p%s+(%w+)%s+$")
     if pMatch then
         TextBox.Text = ""
@@ -361,39 +393,28 @@ local function sendPrivateMessage()
 
     if lowerText == "!server" then
         chatMode = "server"
-        displayMessage("System", "Chat mode switched to SERVER only.", nil)
+        displayMessage("System", "Chat mode switched to SERVER only.", nil, false)
         return
     elseif lowerText == "!global" then
         chatMode = "global"
-        displayMessage("System", "Chat mode switched to GLOBAL.", nil)
+        displayMessage("System", "Chat mode switched to GLOBAL.", nil, false)
         return
     end
 
-    -- Join Command (with partial matching)
-    local joinMatch = string.match(text, "^!join%s+(%w+)")
-    if joinMatch then
-        local matchedName = getFullUsername(joinMatch) or joinMatch
-        local loc = playerLocations[matchedName]
-        
-        if loc and loc.placeId and loc.jobId then
-            displayMessage("System", "Attempting to join " .. matchedName .. "...", nil)
-            TeleportService:TeleportToPlaceInstance(loc.placeId, loc.jobId, LocalPlayer)
-        else
-            displayMessage("System", "Location for " .. matchedName .. " is unknown.", nil)
-        end
-        return
+    -- Embed routing right into the text itself (as requested)
+    local finalMsg = text
+    if privateTarget then
+        finalMsg = "( 🔐 " .. LocalPlayer.Name .. " Private " .. privateTarget .. ") " .. text
     end
 
     TextBox.PlaceholderText = " Sending..."
     task.spawn(function()
         local payloadObj = {
             user = LocalPlayer.Name,
-            msg = text,
-            placeId = game.PlaceId,
+            msg = finalMsg,
             jobId = game.JobId
         }
         
-        if privateTarget then payloadObj.target = privateTarget end
         local payload = HttpService:JSONEncode(payloadObj)
         
         local success, res = pcall(function()
@@ -423,7 +444,6 @@ end)
 -- LOGIC: RECEIVING MESSAGES (POLLING)
 -- ==========================================
 local function pollMessages()
-    -- Lowered wait time to 0.5s for faster message delivery
     while isPolling and task.wait(0.5) do
         local success, res = pcall(function()
             return req({
@@ -438,23 +458,30 @@ local function pollMessages()
                 if m.time > lastSyncTime then
                     lastSyncTime = m.time
                     
-                    if m.placeId and m.jobId then
-                        playerLocations[m.user] = { placeId = m.placeId, jobId = m.jobId }
-                    end
+                    -- Cache users for !p partial matching
+                    knownUsers[string.lower(m.user)] = m.user
                     
-                    -- Filter out automatic system "Joined" spam
                     if m.hidden or m.msg == "Joined" then continue end
-                    
                     if chatMode == "server" and m.jobId ~= game.JobId then continue end
                     
-                    if m.target and m.target ~= "" then
-                        if m.target == LocalPlayer.Name or m.user == LocalPlayer.Name then
-                            displayMessage(m.user, m.msg, m.target)
+                    -- Extract the explicitly attached string format
+                    local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
+                    
+                    if pSender and pTarget then
+                        -- Handle string based routing
+                        if LocalPlayer.Name == pSender then
+                            displayMessage(m.user, pMsg, pTarget, true)
+                            displayBubble(m.user, pMsg)
+                        elseif LocalPlayer.Name == pTarget then
+                            displayMessage(m.user, pMsg, pSender, false)
+                            displayBubble(m.user, pMsg)
                         end
-                        continue
+                        -- Everyone else ignores this completely
+                        continue 
                     end
                     
-                    displayMessage(m.user, m.msg, nil)
+                    displayMessage(m.user, m.msg, nil, false)
+                    displayBubble(m.user, m.msg)
                 end
             end
         end
@@ -469,7 +496,7 @@ task.spawn(function()
         req({
             Url = SERVER_URL .. "/send", Method = "POST",
             Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-            Body = HttpService:JSONEncode({ user = LocalPlayer.Name, msg = "Joined", placeId = game.PlaceId, jobId = game.JobId, hidden = true })
+            Body = HttpService:JSONEncode({ user = LocalPlayer.Name, msg = "Joined", jobId = game.JobId, hidden = true })
         })
     end)
 end)
@@ -478,7 +505,7 @@ task.spawn(pollMessages)
 
 task.spawn(function()
     while task.wait(300) do
-        local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p username ' for private chat ✅.\n3) ' !join username ' join chatters.\n4) ' !server ', ' !global ' switch chat type."
-        displayMessage("System", sysMsg, nil)
+        local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p username ' for private chat ✅.\n3) ' !server ', ' !global ' switch chat type."
+        displayMessage("System", sysMsg, nil, false)
     end
 end)
