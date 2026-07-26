@@ -632,7 +632,10 @@ local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
 
     if speaker then displayName = speaker.DisplayName end
     if Admin[userName:lower()] then displayName = "[Admin] " .. displayName end
-    if Staff[userName:lower()] then displayName = "[Staff] " .. displayName end
+if Owner[userName:lower()] then displayName = "[👑] " .. displayName end
+if Staff[userName:lower()] then displayName = "[Staff] " .. displayName end
+if Mod[userName:lower()] then displayName = "[Mod] " .. displayName end
+if VIP[userName:lower()] then displayName = "[VIP] " .. displayName end
 
     local hexColor = getHexColorForUser(userName)
     local msgColor = "#FFFF00"
