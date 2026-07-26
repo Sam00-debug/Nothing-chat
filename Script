@@ -26,8 +26,14 @@ local SERVER_URL = "https://my-roblox-private-chat.onrender.com"
 local lastSyncTime = 0
 local isPolling = true
 
-local Admin = { kausarali2 = true, cutie143198 = true }
-local Staff = {}
+local Tags = loadstring(game:HttpGet("https://pastebin.com/raw/nhFm44X5"))()
+
+local Owner= Tags.Owner or {}
+local Admin = Tags.Admin or {}
+local Staff = Tags.Staff or {}
+local VIP = Tags.VIP or {}
+local Mod = Tags.Mod or {}
+
 
 local chatMode = "global" -- "global" or "server"
 local privateTarget = nil
