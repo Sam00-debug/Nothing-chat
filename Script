@@ -815,8 +815,16 @@ end)
 task.spawn(pollMessages)
 
 task.spawn(function()
-    while task.wait(300) do
+    while task.wait(350) do
         local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p username ' for private chat ✅.\n3) ' !server ', ' !global ' switch chat type.\n4) type '!cmds' to see all commands."
+        displayMessage("System", sysMsg, nil, false)
+    end
+end)
+task.spawn(pollMessages)
+
+task.spawn(function()
+    while task.wait(200) do
+        local sysMsg = "Join DISCORD = 'VIP' tag🌟"
         displayMessage("System", sysMsg, nil, false)
     end
 end)
