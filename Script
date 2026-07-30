@@ -41,7 +41,7 @@ local function toLowerKeys(tbl)
     return lowerTbl
 end
 
-local RawTags = loadstring(game:HttpGet("https://pastebin.com/raw/nhFm44X5"))() or {}
+local RawTags = loadstring(game:HttpGet("https://raw.githubusercontent.com/Sam00-debug/Nothing-Panel-/refs/heads/main/Chat%20titles"))() or {}
 
 local Owner = toLowerKeys(RawTags.Owner or {})
 local Admin = toLowerKeys(RawTags.Admin or {})
@@ -492,7 +492,7 @@ local function openPlayerSelectUI()
 
     local pFrame = Instance.new("Frame", ScreenGui)
     pFrame.Name = "PlayerSelectFrame"
-    pFrame.Size = UDim2.new(0, 600, 0, 600)
+    pFrame.Size = UDim2.new(0, 400, 0, 400)
     pFrame.Position = UDim2.new(0.5, -300, 0.5, -300)
     pFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Completely Black
     pFrame.Active = true
@@ -571,13 +571,13 @@ local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
         rtsTag = "<font color='#FF0000'>[Admin]</font> "
         legacyTag = "[Admin] "
     elseif Owner[lowerUser] then 
-        rtsTag = "<font color='#FFD700'>[👑 Owner]</font> "
+        rtsTag = "<font color='#000000'>[👑]</font> "
         legacyTag = "[👑] "
     elseif Staff[lowerUser] then 
         rtsTag = "<font color='#00AAFF'>[Staff]</font> "
         legacyTag = "[Staff] "
     elseif Mod[lowerUser] then 
-        rtsTag = "<font color='#00FF00'>[Mod]</font> "
+        rtsTag = "<font color='#0000FF'>[Mod]</font> "
         legacyTag = "[Mod] "
     elseif VIP[lowerUser] then 
         rtsTag = "<font color='#FFFF00'>[VIP]</font> "
