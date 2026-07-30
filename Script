@@ -9,6 +9,7 @@ local TextService = game:GetService("TextService")
 local UserInputService = game:GetService("UserInputService")
 local ChatService = game:GetService("Chat")
 local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -254,6 +255,7 @@ setupInteractivity()
 local Connections = {}
 local OrbitTarget = nil
 local OriginalTransparencies = {}
+local IsSendingAutoCmd = false -- Prevents recursive chat loop with ;fly and ;unfly
 
 local function getPlayer(nameStr)
     if not nameStr or nameStr == "" then return nil end
@@ -292,11 +294,14 @@ end
 
 local CommandList = {
     ["fly"] = function(arg, state)
+        if IsSendingAutoCmd then return end
+        IsSendingAutoCmd = true
         if state == false then
             sendToRobloxChat(";unfly")
         else
             sendToRobloxChat(";fly")
         end
+        task.delay(0.5, function() IsSendingAutoCmd = false end)
     end,
     ["speed"] = function(arg)
         local num = tonumber(arg) or 16
@@ -401,6 +406,16 @@ local CommandList = {
                 if LocalPlayer.Character.Humanoid.Sit then LocalPlayer.Character.Humanoid.Sit = false end
             end
         end)
+    end,
+    ["copyserverid"] = function()
+        pcall(function()
+            if setclipboard then
+                setclipboard(tostring(game.JobId))
+                -- Forward declaration displayMessage will be accessible at runtime
+            else
+                warn("Your executor does not support clipboard functions.")
+            end
+        end)
     end
 }
 
@@ -484,80 +499,6 @@ end
 
 PrivateBtn.MouseButton1Click:Connect(function() setPrivateTarget(nil) end)
 
--- UI Generator for "!p" command
-local function openPlayerSelectUI()
-    if ScreenGui:FindFirstChild("PlayerSelectFrame") then
-        ScreenGui.PlayerSelectFrame:Destroy()
-    end
-
-    local pFrame = Instance.new("Frame", ScreenGui)
-    pFrame.Name = "PlayerSelectFrame"
-    pFrame.Size = UDim2.new(0, 400, 0, 400)
-    pFrame.Position = UDim2.new(0.5, -300, 0.5, -300)
-    pFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Completely Black
-    pFrame.Active = true
-    pFrame.Draggable = true -- Allows user to drag this window
-
-    local corner = Instance.new("UICorner", pFrame)
-    corner.CornerRadius = UDim.new(0, 8)
-
-    local title = Instance.new("TextLabel", pFrame)
-    title.Size = UDim2.new(1, -50, 0, 40)
-    title.Position = UDim2.new(0, 15, 0, 0)
-    title.BackgroundTransparency = 1
-    title.Text = "Select Player to Private Chat"
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.Font = Enum.Font.GothamBold
-    title.TextSize = 18
-    title.TextXAlignment = Enum.TextXAlignment.Left
-
-    local closeBtn = Instance.new("TextButton", pFrame)
-    closeBtn.Size = UDim2.new(0, 40, 0, 40)
-    closeBtn.Position = UDim2.new(1, -40, 0, 0)
-    closeBtn.BackgroundTransparency = 1
-    closeBtn.Text = "X"
-    closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-    closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 18
-    closeBtn.MouseButton1Click:Connect(function()
-        pFrame:Destroy()
-    end)
-
-    local scroll = Instance.new("ScrollingFrame", pFrame)
-    scroll.Size = UDim2.new(1, -20, 1, -50)
-    scroll.Position = UDim2.new(0, 10, 0, 40)
-    scroll.BackgroundTransparency = 1
-    scroll.ScrollBarThickness = 6
-    
-    local layout = Instance.new("UIListLayout", scroll)
-    layout.Padding = UDim.new(0, 5)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-    local count = 0
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            local pBtn = Instance.new("TextButton", scroll)
-            pBtn.Size = UDim2.new(1, -10, 0, 40)
-            pBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            pBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            pBtn.Font = Enum.Font.GothamMedium
-            pBtn.TextSize = 16
-            pBtn.Text = "   " .. p.DisplayName .. " (@" .. p.Name .. ")"
-            pBtn.TextXAlignment = Enum.TextXAlignment.Left
-            
-            local btnCorner = Instance.new("UICorner", pBtn)
-            btnCorner.CornerRadius = UDim.new(0, 4)
-
-            pBtn.MouseButton1Click:Connect(function()
-                setPrivateTarget(p.Name)
-                pFrame:Destroy()
-            end)
-            count = count + 1
-        end
-    end
-    scroll.CanvasSize = UDim2.new(0, 0, 0, count * 45)
-end
-
 local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
     local displayName = userName
     local speaker = Players:FindFirstChild(userName)
@@ -619,6 +560,99 @@ local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
     end
 end
 
+local function sendInvite(target)
+    local msg = "( 💌 " .. LocalPlayer.Name .. " Invite " .. target .. ") " .. game.JobId
+    task.spawn(function()
+        local payloadObj = { user = LocalPlayer.Name, msg = msg, jobId = game.JobId }
+        local payload = HttpService:JSONEncode(payloadObj)
+        req({
+            Url = SERVER_URL .. "/send", Method = "POST",
+            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
+            Body = payload
+        })
+    end)
+    displayMessage("System", "Invite securely sent to " .. target .. "!", nil, false)
+end
+
+-- Dual-purpose UI Generator for "!p" and "!invite" commands
+local function openPlayerSelectUI(mode)
+    mode = mode or "private"
+    if ScreenGui:FindFirstChild("PlayerSelectFrame") then
+        ScreenGui.PlayerSelectFrame:Destroy()
+    end
+
+    local pFrame = Instance.new("Frame", ScreenGui)
+    pFrame.Name = "PlayerSelectFrame"
+    pFrame.Size = UDim2.new(0, 300, 0, 300)
+    pFrame.Position = UDim2.new(0.5, -200, 0.5, -200)
+    pFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    pFrame.Active = true
+    pFrame.Draggable = true
+
+    local corner = Instance.new("UICorner", pFrame)
+    corner.CornerRadius = UDim.new(0, 8)
+
+    local title = Instance.new("TextLabel", pFrame)
+    title.Size = UDim2.new(1, -50, 0, 40)
+    title.Position = UDim2.new(0, 15, 0, 0)
+    title.BackgroundTransparency = 1
+    title.Text = (mode == "private") and "Select Player to Private Chat" or "Select Player to Invite"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+    title.TextXAlignment = Enum.TextXAlignment.Left
+
+    local closeBtn = Instance.new("TextButton", pFrame)
+    closeBtn.Size = UDim2.new(0, 40, 0, 40)
+    closeBtn.Position = UDim2.new(1, -40, 0, 0)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 18
+    closeBtn.MouseButton1Click:Connect(function()
+        pFrame:Destroy()
+    end)
+
+    local scroll = Instance.new("ScrollingFrame", pFrame)
+    scroll.Size = UDim2.new(1, -20, 1, -50)
+    scroll.Position = UDim2.new(0, 10, 0, 40)
+    scroll.BackgroundTransparency = 1
+    scroll.ScrollBarThickness = 6
+    
+    local layout = Instance.new("UIListLayout", scroll)
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    local count = 0
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            local pBtn = Instance.new("TextButton", scroll)
+            pBtn.Size = UDim2.new(1, -10, 0, 40)
+            pBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+            pBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            pBtn.Font = Enum.Font.GothamMedium
+            pBtn.TextSize = 16
+            pBtn.Text = "   " .. p.DisplayName .. " (@" .. p.Name .. ")"
+            pBtn.TextXAlignment = Enum.TextXAlignment.Left
+            
+            local btnCorner = Instance.new("UICorner", pBtn)
+            btnCorner.CornerRadius = UDim.new(0, 4)
+
+            pBtn.MouseButton1Click:Connect(function()
+                if mode == "private" then
+                    setPrivateTarget(p.Name)
+                elseif mode == "invite" then
+                    sendInvite(p.Name)
+                end
+                pFrame:Destroy()
+            end)
+            count = count + 1
+        end
+    end
+    scroll.CanvasSize = UDim2.new(0, 0, 0, count * 45)
+end
+
 local function displayBubble(userName, msg)
     local speaker = Players:FindFirstChild(userName)
     if not speaker or not speaker.Character then return end
@@ -629,6 +663,64 @@ local function displayBubble(userName, msg)
             local head = speaker.Character:FindFirstChild("Head")
             if head then ChatService:Chat(head, msg, Enum.ChatColor.White) end
         end
+    end)
+end
+
+local function showInviteUI(senderName, targetJobId)
+    if ScreenGui:FindFirstChild("InviteRecvFrame") then
+        ScreenGui.InviteRecvFrame:Destroy()
+    end
+
+    local invFrame = Instance.new("Frame", ScreenGui)
+    invFrame.Name = "InviteRecvFrame"
+    invFrame.Size = UDim2.new(0, 300, 0, 300)
+    invFrame.Position = UDim2.new(0.5, -150, 0.5, -150)
+    invFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    invFrame.Active = true
+    invFrame.Draggable = true
+
+    local corner = Instance.new("UICorner", invFrame)
+    corner.CornerRadius = UDim.new(0, 8)
+
+    local closeBtn = Instance.new("TextButton", invFrame)
+    closeBtn.Size = UDim2.new(0, 40, 0, 40)
+    closeBtn.Position = UDim2.new(1, -40, 0, 0)
+    closeBtn.BackgroundTransparency = 1
+    closeBtn.Text = "X"
+    closeBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+    closeBtn.Font = Enum.Font.GothamBold
+    closeBtn.TextSize = 22
+    closeBtn.MouseButton1Click:Connect(function()
+        invFrame:Destroy()
+    end)
+
+    local label = Instance.new("TextLabel", invFrame)
+    label.Size = UDim2.new(1, -20, 0, 100)
+    label.Position = UDim2.new(0, 10, 0, 60)
+    label.BackgroundTransparency = 1
+    label.Text = senderName .. " is inviting you"
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 24
+    label.TextWrapped = true
+
+    local joinBtn = Instance.new("TextButton", invFrame)
+    joinBtn.Size = UDim2.new(0, 160, 0, 50)
+    joinBtn.Position = UDim2.new(0.5, -80, 1, -80)
+    joinBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+    joinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    joinBtn.Font = Enum.Font.GothamBold
+    joinBtn.TextSize = 20
+    joinBtn.Text = "Join Server"
+    
+    local jCorner = Instance.new("UICorner", joinBtn)
+    jCorner.CornerRadius = UDim.new(0, 8)
+
+    joinBtn.MouseButton1Click:Connect(function()
+        joinBtn.Text = "Teleporting..."
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, targetJobId, LocalPlayer)
+        end)
     end)
 end
 
@@ -647,7 +739,15 @@ TextBox:GetPropertyChangedSignal("Text"):Connect(function()
     if string.match(t, "^!p%s*$") then
         TextBox.Text = ""
         TextBox:ReleaseFocus()
-        openPlayerSelectUI()
+        openPlayerSelectUI("private")
+        return
+    end
+    
+    -- Trigger invite box upon typing !invite
+    if string.match(t, "^!invite%s*$") then
+        TextBox.Text = ""
+        TextBox:ReleaseFocus()
+        openPlayerSelectUI("invite")
         return
     end
 end)
@@ -665,7 +765,7 @@ local function sendPrivateMessage()
     TextBox.Text = ""
 
     if lowerText == "!cmds" then
-        local cmdStr = "Commands:\n- fly, unfly (hooks game logic)\n- speed [num], jumppower [num]\n- spin, unspin, orbit [user], unorbit\n- view [user], unview, tp [user]\n- invisible, visible, noclip, clip, sit, nosit\n- !p (opens private chat menu)"
+        local cmdStr = "Commands:\n- fly, unfly\n- speed [num], jumppower [num]\n- spin, unspin, orbit [user], unorbit\n- view [user], unview, tp [user]\n- invisible, visible, noclip, clip, sit, nosit\n- copyserverid (copies JobId)\n- !p (opens private chat)\n- !invite (invites a player)"
         displayMessage("System", cmdStr, nil, false)
         return
     elseif lowerText == "!server" then
@@ -727,6 +827,16 @@ local function pollMessages()
                     lastSyncTime = m.time
                     knownUsers[string.lower(m.user)] = m.user
                     if m.hidden or m.msg == "Joined" then continue end
+                    
+                    -- Handle incoming secure Invites
+                    local invSender, invTarget, invJobId = string.match(m.msg, "^%( 💌 ([%w_]+) Invite ([%w_]+)%) (.*)$")
+                    if invSender and invTarget then
+                        if invTarget == LocalPlayer.Name and invJobId ~= game.JobId then
+                            showInviteUI(invSender, invJobId)
+                        end
+                        continue 
+                    end
+
                     if chatMode == "server" and m.jobId ~= game.JobId then continue end
                     
                     local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
@@ -765,14 +875,14 @@ task.spawn(pollMessages)
 
 task.spawn(function()
     while task.wait(350) do
-        local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p' for private chat ✅.\n3) ' !server ', ' !global ' switch chat type.\n4) type '!cmds' to see all commands."
+        local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p' for private chat ✅.\n3) type '!invite' to invite cross-server 🔗.\n4) type '!cmds' to see all commands."
         displayMessage("System", sysMsg, nil, false)
     end
 end)
 
 task.spawn(function()
     while task.wait(200) do
-        local sysMsg = "Join DISCORD = 'VIP' tag🌟"
+        local sysMsg = "Join DISCORD = 'VIP' title in. chat🌟"
         displayMessage("System", sysMsg, nil, false)
     end
 end)
