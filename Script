@@ -42,7 +42,7 @@ local function toLowerKeys(tbl)
     return lowerTbl
 end
 
-local RawTags = loadstring(game:HttpGet("https://raw.githubusercontent.com/Sam00-debug/Nothing-Panel-/refs/heads/main/Chat%20titles"))() or {}
+local RawTags = loadstring(game:HttpGet("https://raw.githubusercontent.com/Sam00-debug/C-/refs/heads/main/Illusion"))() or {}
 
 local Owner = toLowerKeys(RawTags.Owner or {})
 local Admin = toLowerKeys(RawTags.Admin or {})
