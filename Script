@@ -560,18 +560,78 @@ local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
     end
 end
 
+
+local function checkMention(msg)
+    if not msg or msg == "" then
+        return
+    end
+
+    local username = LocalPlayer.Name
+
+    local pattern = "@"
+        .. string.gsub(username, "([^%w])", "%%%1")
+
+    if string.lower(msg):find(string.lower(pattern), 1, true) then
+
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title = "💬 Mention",
+                Text = "Someone mentioned you in panel chat",
+                Duration = 4
+            })
+        end)
+
+        return true
+    end
+
+    return false
+end
+
 local function sendInvite(target)
+    if not target or target == "" then
+        return
+    end
+
     local msg = "( 💌 " .. LocalPlayer.Name .. " Invite " .. target .. ") " .. game.JobId
+
+    local payloadObj = {
+        user = LocalPlayer.Name,
+        msg = msg,
+        jobId = game.JobId,
+        source = "roblox",
+        hidden = true
+    }
+
     task.spawn(function()
-        local payloadObj = { user = LocalPlayer.Name, msg = msg, jobId = game.JobId }
-        local payload = HttpService:JSONEncode(payloadObj)
-        req({
-            Url = SERVER_URL .. "/send", Method = "POST",
-            Headers = { ["Content-Type"] = "application/json", ["User-Agent"] = "Roblox/WinInet" },
-            Body = payload
-        })
+        local success, res = pcall(function()
+            return req({
+                Url = SERVER_URL .. "/send",
+                Method = "POST",
+                Headers = {
+                    ["Content-Type"] = "application/json",
+                    ["User-Agent"] = "Roblox/WinInet"
+                },
+                Body = HttpService:JSONEncode(payloadObj)
+            })
+        end)
+
+        if not success then
+            warn("Invite send failed:", res)
+            return
+        end
+
+        if not res or res.StatusCode ~= 200 then
+            warn("Invite server returned:", res and res.StatusCode)
+            return
+        end
+
+        displayMessage(
+            "System",
+            "Invite sent to @" .. target,
+            nil,
+            false
+        )
     end)
-    displayMessage("System", "Invite securely sent to " .. target .. "!", nil, false)
 end
 
 -- Dual-purpose UI Generator for "!p" and "!invite" commands
@@ -743,14 +803,17 @@ TextBox:GetPropertyChangedSignal("Text"):Connect(function()
         return
     end
     
-    -- Trigger invite box upon typing !invite
-    if string.match(t, "^!invite%s*$") then
-        TextBox.Text = ""
-        TextBox:ReleaseFocus()
+-- Trigger invite player selector
+if string.lower(t):match("^!invite%s*$") then
+    TextBox.Text = ""
+    TextBox:ReleaseFocus()
+
+    task.defer(function()
         openPlayerSelectUI("invite")
-        return
-    end
-end)
+    end)
+
+    return
+end
 
 local function sendPrivateMessage()
     local text = TextBox.Text
@@ -835,14 +898,22 @@ local function pollMessages()
                     if m.hidden or m.msg == "Joined" then continue end
                     
                     -- Handle incoming secure Invites
-                    local invSender, invTarget, invJobId = string.match(m.msg, "^%( 💌 ([%w_]+) Invite ([%w_]+)%) (.*)$")
-                    if invSender and invTarget then
-                        if invTarget == LocalPlayer.Name and invJobId ~= game.JobId then
-                            showInviteUI(invSender, invJobId)
-                        end
-                        continue 
-                    end
+                    local invSender, invTarget, invJobId =
+    string.match(
+        m.msg,
+        "^%( 💌 ([%w_]+) Invite ([%w_]+)%) (.+)$"
+    )
 
+if invSender and invTarget and invJobId then
+
+    if string.lower(invTarget) == string.lower(LocalPlayer.Name)
+        and invJobId ~= game.JobId then
+
+        showInviteUI(invSender, invJobId)
+    end
+
+    continue
+end
                     if chatMode == "server" and m.jobId ~= game.JobId then continue end
                     
                     local pSender, pTarget, pMsg = string.match(m.msg, "^%( 🔐 ([%w_]+) Private ([%w_]+)%) (.*)$")
@@ -856,6 +927,9 @@ local function pollMessages()
                         end
                         continue
                     end
+
+                  checkMention(m.msg)
+
                     displayMessage(m.user, m.msg, nil, false)
                     displayBubble(m.user, m.msg)
                 end
