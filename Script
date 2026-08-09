@@ -785,8 +785,14 @@ local function sendPrivateMessage()
 
     TextBox.PlaceholderText = " Sending..."
     task.spawn(function()
-        local payloadObj = { user = LocalPlayer.Name, msg = finalMsg, jobId = game.JobId }
-        local payload = HttpService:JSONEncode(payloadObj)
+        local payloadObj = {
+    user = LocalPlayer.Name,
+    msg = finalMsg,
+    jobId = game.JobId,
+    private = privateTarget ~= nil
+}
+
+local payload = HttpService:JSONEncode(payloadObj)
         local success, res = pcall(function()
             return req({
                 Url = SERVER_URL .. "/send", Method = "POST",
