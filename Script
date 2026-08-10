@@ -370,6 +370,11 @@ local CommandList = {
             char.HumanoidRootPart.CFrame = target.Character.HumanoidRootPart.CFrame
         end
     end,
+
+CommandList["to"] = CommandList["tp"]
+CommandList["teleport"] = CommandList["tp"]
+CommandList["goto"] = CommandList["tp"]
+
     ["invisible"] = function(state)
         local char = getCharacter()
         if not char then return end
@@ -407,6 +412,7 @@ local CommandList = {
             end
         end)
     end,
+CommandList["sitoff"] = CommandList["nosit"]
     ["copyserverid"] = function()
         pcall(function()
             if setclipboard then
@@ -417,6 +423,9 @@ local CommandList = {
             end
         end)
     end
+CommandList["serverid"] = CommandList["copyserverid"]
+CommandList["jobid"] = CommandList["copyserverid"]
+
 }
 
 -- Aliases to route to the main functions
@@ -499,10 +508,15 @@ end
 
 PrivateBtn.MouseButton1Click:Connect(function() setPrivateTarget(nil) end)
 
-local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
-    local displayName = userName
-    local speaker = Players:FindFirstChild(userName)
-    if speaker then displayName = speaker.DisplayName end
+local function displayMessage(userName, msg, privateUserTarget, isPrivateSender, receivedDisplayName)
+    local displayName = receivedDisplayName or userName
+
+    if not receivedDisplayName then
+        local speaker = Players:FindFirstChild(userName)
+        if speaker then
+            displayName = speaker.DisplayName
+        end
+    end
 
     local rtsTag = ""
     local legacyTag = ""
@@ -512,7 +526,7 @@ local function displayMessage(userName, msg, privateUserTarget, isPrivateSender)
         rtsTag = "<font color='#FF0000'>[Admin]</font> "
         legacyTag = "[Admin] "
     elseif Owner[lowerUser] then 
-        rtsTag = "<font color='#000000'>[👑]</font> "
+        rtsTag = "<font color='#FFFF00'>[👑]</font> "
         legacyTag = "[👑] "
     elseif Staff[lowerUser] then 
         rtsTag = "<font color='#00AAFF'>[Staff]</font> "
@@ -634,6 +648,51 @@ local function sendInvite(target)
     end)
 end
 
+local function getJoinedUsers()
+    local success, res = pcall(function()
+        return req({
+            Url = SERVER_URL .. "/messages?since=0",
+            Method = "GET",
+            Headers = {
+                ["User-Agent"] = "Roblox/WinInet"
+            }
+        })
+    end)
+
+    if not success or not res or res.StatusCode ~= 200 then
+        return {}
+    end
+
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(res.Body)
+    end)
+
+    if not ok or type(data) ~= "table" then
+        return {}
+    end
+
+    local users = {}
+    local seen = {}
+
+    for _, m in ipairs(data) do
+        if m.hidden and m.msg == "Joined" then
+            local key = string.lower(m.user)
+
+            if not seen[key] and key ~= string.lower(LocalPlayer.Name) then
+                seen[key] = true
+
+                table.insert(users, {
+                    user = m.user,
+                    displayName = m.displayName or m.user,
+                    jobId = m.jobId
+                })
+            end
+        end
+    end
+
+    return users
+end
+
 -- Dual-purpose UI Generator for "!p" and "!invite" commands
 local function openPlayerSelectUI(mode)
     mode = mode or "private"
@@ -685,30 +744,37 @@ local function openPlayerSelectUI(mode)
     layout.SortOrder = Enum.SortOrder.LayoutOrder
 
     local count = 0
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer then
-            local pBtn = Instance.new("TextButton", scroll)
-            pBtn.Size = UDim2.new(1, -10, 0, 40)
-            pBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-            pBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            pBtn.Font = Enum.Font.GothamMedium
-            pBtn.TextSize = 16
-            pBtn.Text = "   " .. p.DisplayName .. " (@" .. p.Name .. ")"
-            pBtn.TextXAlignment = Enum.TextXAlignment.Left
-            
-            local btnCorner = Instance.new("UICorner", pBtn)
-            btnCorner.CornerRadius = UDim.new(0, 4)
+    local scriptUsers = getJoinedUsers()
 
-            pBtn.MouseButton1Click:Connect(function()
-                if mode == "private" then
-                    setPrivateTarget(p.Name)
-                elseif mode == "invite" then
-                    sendInvite(p.Name)
-                end
-                pFrame:Destroy()
-            end)
-            count = count + 1
+for _, data in ipairs(scriptUsers) do
+
+    local pBtn = Instance.new("TextButton", scroll)
+    pBtn.Size = UDim2.new(1, -10, 0, 40)
+    pBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    pBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    pBtn.Font = Enum.Font.GothamMedium
+    pBtn.TextSize = 16
+
+    pBtn.Text = "   " .. data.displayName .. " (@" .. data.user .. ")"
+    pBtn.TextXAlignment = Enum.TextXAlignment.Left
+
+    local btnCorner = Instance.new("UICorner", pBtn)
+    btnCorner.CornerRadius = UDim.new(0, 4)
+
+    pBtn.MouseButton1Click:Connect(function()
+
+        if mode == "private" then
+            setPrivateTarget(data.user)
+
+        elseif mode == "invite" then
+            sendInvite(data.user)
         end
+
+        pFrame:Destroy()
+    end)
+
+    count = count + 1
+end
     end
     scroll.CanvasSize = UDim2.new(0, 0, 0, count * 45)
 end
@@ -804,7 +870,7 @@ TextBox:GetPropertyChangedSignal("Text"):Connect(function()
     end
     
 -- Trigger invite player selector
-if string.lower(t):match("^!invite%s*$") then
+    if string.match(t, "^!i%s*$") then
     TextBox.Text = ""
     TextBox:ReleaseFocus()
 
@@ -850,9 +916,11 @@ local function sendPrivateMessage()
     task.spawn(function()
         local payloadObj = {
     user = LocalPlayer.Name,
+    displayName = LocalPlayer.DisplayName,
     msg = finalMsg,
     jobId = game.JobId,
-    private = privateTarget ~= nil
+    private = privateTarget ~= nil,
+    source = "roblox"
 }
 
 local payload = HttpService:JSONEncode(payloadObj)
@@ -930,7 +998,7 @@ end
 
                   checkMention(m.msg)
 
-                    displayMessage(m.user, m.msg, nil, false)
+                    displayMessage(m.user, m.msg, nil, false, m.displayName)
                     displayBubble(m.user, m.msg)
                 end
             end
@@ -955,7 +1023,7 @@ task.spawn(pollMessages)
 
 task.spawn(function()
     while task.wait(350) do
-        local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p' for private chat ✅.\n3) type '!invite' to invite cross-server 🔗.\n4) type '!cmds' to see all commands."
+        local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p' for private chat ✅.\n3) type '!i' to invite cross-server 🔗.\n4) type '!cmds' to see all commands."
         displayMessage("System", sysMsg, nil, false)
     end
 end)
