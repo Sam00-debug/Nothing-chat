@@ -371,9 +371,6 @@ local CommandList = {
         end
     end,
 
-CommandList["to"] = CommandList["tp"]
-CommandList["teleport"] = CommandList["tp"]
-CommandList["goto"] = CommandList["tp"]
 
     ["invisible"] = function(state)
         local char = getCharacter()
@@ -423,8 +420,6 @@ CommandList["sitoff"] = CommandList["nosit"]
             end
         end)
     end
-CommandList["serverid"] = CommandList["copyserverid"]
-CommandList["jobid"] = CommandList["copyserverid"]
 
 }
 
@@ -441,6 +436,11 @@ CommandList["unview"] = function() CommandList["view"](nil, false) end
 CommandList["noview"] = function() CommandList["view"](nil, false) end
 CommandList["to"] = CommandList["tp"]
 CommandList["teleport"] = CommandList["tp"]
+CommandList["goto"] = CommandList["tp"]
+CommandList["serverid"] = CommandList["copyserverid"]
+CommandList["jobid"] = CommandList["copyserverid"]
+
+
 CommandList["visible"] = function() CommandList["invisible"](false) end
 CommandList["vis"] = function() CommandList["invisible"](false) end
 CommandList["invis"] = CommandList["invisible"]
@@ -775,7 +775,7 @@ for _, data in ipairs(scriptUsers) do
 
     count = count + 1
 end
-    end
+    
     scroll.CanvasSize = UDim2.new(0, 0, 0, count * 45)
 end
 
