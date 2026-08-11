@@ -409,7 +409,7 @@ local CommandList = {
             end
         end)
     end,
-CommandList["sitoff"] = CommandList["nosit"]
+
     ["copyserverid"] = function()
         pcall(function()
             if setclipboard then
