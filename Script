@@ -299,7 +299,7 @@ end,
 
 ["unfly"] = function(arg, state)
     game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";unfly")
-end
+end,
 
     ["speed"] = function(arg)
         local num = tonumber(arg) or 16
@@ -422,7 +422,7 @@ end
 }
 
 -- Aliases to route to the main functions
-CommandList["unfly"] = function() CommandList["unfly"](nil, false) end
+
 CommandList["nofly"] = function() CommandList["unfly"](nil, false) end
 CommandList["unspeed"] = function() CommandList["speed"]() end
 CommandList["jp"] = CommandList["jumppower"]
