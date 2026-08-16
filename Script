@@ -294,15 +294,13 @@ end
 
 local CommandList = {
     ["fly"] = function(arg, state)
-        if IsSendingAutoCmd then return end
-        IsSendingAutoCmd = true
-        if state == false then
-            sendToRobloxChat(";unfly")
-        else
-            sendToRobloxChat(";fly")
-        end
-        task.delay(0.5, function() IsSendingAutoCmd = false end)
-    end,
+    game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";fly")
+end,
+
+["unfly"] = function(arg, state)
+    game:GetService("TextChatService").TextChannels.RBXGeneral:SendAsync(";unfly")
+end
+
     ["speed"] = function(arg)
         local num = tonumber(arg) or 16
         local char = getCharacter()
@@ -424,8 +422,8 @@ local CommandList = {
 }
 
 -- Aliases to route to the main functions
-CommandList["unfly"] = function() CommandList["fly"](nil, false) end
-CommandList["nofly"] = function() CommandList["fly"](nil, false) end
+CommandList["unfly"] = function() CommandList["unfly"](nil, false) end
+CommandList["nofly"] = function() CommandList["unfly"](nil, false) end
 CommandList["unspeed"] = function() CommandList["speed"]() end
 CommandList["jp"] = CommandList["jumppower"]
 CommandList["unjumppower"] = function() CommandList["jumppower"]() end
@@ -451,15 +449,19 @@ CommandList["unnosit"] = function() CommandList["nosit"](false) end
 
 -- Processes the text. Returns true if it was a command, false otherwise.
 local function processCommand(text)
-    local cleanStr = text:match("^%s*[%!%;]?%s*(.-)%s*$")
+    local cleanStr = text:match("^%s*[/,;:!.]?%s*(.-)%s*$")
     if not cleanStr or cleanStr == "" then return false end
 
     local cmd, args = cleanStr:lower():match("^(%S+)%s*(.*)$")
     if not cmd then return false end
+
     if CommandList[cmd] then
-        pcall(function() CommandList[cmd](args) end)
+        pcall(function()
+            CommandList[cmd](args)
+        end)
         return true
     end
+
     return false
 end
 
