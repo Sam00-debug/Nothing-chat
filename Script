@@ -947,6 +947,33 @@ TextBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then sendPrivateMessage() end
 end)
 end)
+
+
+
+local function initializeSyncTime()
+    local success, res = pcall(function()
+        return req({
+            Url = SERVER_URL .. "/messages?since=0",
+            Method = "GET",
+            Headers = { ["User-Agent"] = "Roblox/WinInet" }
+        })
+    end)
+
+    if success and res and res.StatusCode == 200 then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(res.Body)
+        end)
+
+        if ok and type(data) == "table" then
+            for _, m in ipairs(data) do
+                if tonumber(m.time) and tonumber(m.time) > lastSyncTime then
+                    lastSyncTime = tonumber(m.time)
+                end
+            end
+        end
+    end
+end
+
 -- ==========================================
 -- LOGIC: RECEIVING MESSAGES (POLLING)
 -- ==========================================
@@ -965,7 +992,18 @@ local function pollMessages()
                 if m.time > lastSyncTime then
                     lastSyncTime = m.time
                     knownUsers[string.lower(m.user)] = m.user
-                    if m.hidden or m.msg == "Joined" then continue end
+                    if m.hidden and m.msg ~= "Joined" then continue end
+
+if m.msg == "Joined" then
+    displayMessage(
+        m.user,
+        (m.displayName or m.user) .. " joined the chat.",
+        nil,
+        false,
+        m.displayName
+    )
+    continue
+end
                     
                     -- Handle incoming secure Invites
                     local invSender, invTarget, invJobId =
@@ -1021,7 +1059,11 @@ task.spawn(function()
     end)
 end)
 
-task.spawn(pollMessages)
+task.spawn(function()
+    initializeSyncTime()
+    task.wait(0.2)
+    pollMessages()
+end)
 
 task.spawn(function()
     while task.wait(350) do
