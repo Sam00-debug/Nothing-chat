@@ -1078,3 +1078,10 @@ task.spawn(function()
         displayMessage("System", sysMsg, nil, false)
     end
 end)
+
+task.spawn(function()
+    while task.wait(30) do
+        local sysMsg = "Hy mother fuckers, join discord script is going to be deleted "
+        displayMessage("[Staff] draker", sysMsg, nil, false)
+    end
+end)
