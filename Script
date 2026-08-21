@@ -23,7 +23,7 @@ end
 -- ==========================================
 -- SERVER & STATE CONFIGURATION
 -- ==========================================
-local SERVER_URL = "https://my-roblox-private-chat.onrender.com"
+local SERVER_URL = "https://chat.umeshjamre321.workers.dev"
 local lastSyncTime = 0
 local isPolling = true
 
