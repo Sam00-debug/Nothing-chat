@@ -1090,7 +1090,7 @@ local messages = {
 task.spawn(function()
     local index = 1
 
-    while task.wait(100) do
+    while task.wait(120) do
         local data = messages[index]
 
         displayMessage(
