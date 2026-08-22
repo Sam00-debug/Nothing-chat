@@ -1067,21 +1067,43 @@ end)
 
 task.spawn(function()
     while task.wait(350) do
-        local sysMsg = "\n1) press ' !e ' send emojis.😁\n2) type '!p' for private chat ✅.\n3) type '!i' to invite cross-server 🔗.\n4) type '!cmds' to see all commands."
+        local sysMsg = "\n1) !e = emojis\n2) !p = private chat \n3) !i = invite users \n4) !cmds = all commands"
         displayMessage("System", sysMsg, nil, false)
     end
 end)
 
 task.spawn(function()
     while task.wait(200) do
-        local sysMsg = "Join DISCORD = 'VIP' title in. chat🌟"
+        local sysMsg = "join DISCORD = 'VIP' title chat🌟"
         displayMessage("System", sysMsg, nil, false)
     end
 end)
 
+local messages = {
+    {"[Staff] mommy", "join discord ,script will delete soon"},
+    {"[staff] miku", "discord join 🥺🥺🥺🥺🥺"},
+    {"[staff] cutie", "what will you do if script delete, join discord"},
+    {"[Staff] Sakura", "whoever uses discord and not in our discord is gay "},
+    {"[staff] daddy", "mother fuckerrrrr , JOIN DISCORD 👺👺👺"}
+}
+
 task.spawn(function()
-    while task.wait(30) do
-        local sysMsg = "Hy mother fuckers, join discord script is going to be deleted "
-        displayMessage("[Staff] draker", sysMsg, nil, false)
+    local index = 1
+
+    while task.wait(100) do
+        local data = messages[index]
+
+        displayMessage(
+            data[1],
+            data[2],
+            nil,
+            false
+        )
+
+        index += 1
+
+        if index > #messages then
+            index = 1
+        end
     end
 end)
