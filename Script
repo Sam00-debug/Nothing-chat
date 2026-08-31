@@ -1,0 +1,76 @@
+
+if _G.BotAutoMessageExecuted then
+    return
+end
+
+_G.BotAutoMessageExecuted = true
+
+local StarterGui = game:GetService("StarterGui")
+local TextChatService = game:GetService("TextChatService")
+
+--bot message 
+local messages = {
+    {"[Bot] mommy", "nothing panel will be deleted , join discord!"},
+    {"[Bot] miku", "discord join guys 🥲!"},
+    {"[Bot] cutie", "if you won't join discord- im gonna change key!"},
+    {"[Bot] Sakura", "what will you do if script delete from delta- join discord"},
+    {"[Bot] daddy", "discord join moth3r Fuckrs.!"}
+}
+
+--display message 
+local function displayBotMessage(botName, message)
+
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+
+        local channel =
+            TextChatService.TextChannels:FindFirstChild("RBXSystem")
+
+        if channel then
+            local formattedText = string.format(
+                "<font color='#00AAFF'><b>%s</b></font> <font color='#FFFF00'><b>%s</b></font>",
+                botName,
+                message
+            )
+
+            channel:DisplaySystemMessage(formattedText)
+        end
+
+    else
+
+        pcall(function()
+            StarterGui:SetCore("ChatMakeSystemMessage", {
+                Text = botName .. " " .. message,
+                Color = Color3.fromRGB(255, 255, 0),
+                Font = Enum.Font.SourceSansBold,
+                FontSize = Enum.FontSize.Size18
+            })
+        end)
+
+    end
+end
+
+--loop
+task.spawn(function()
+
+    local index = 1
+
+    while task.wait(120) do
+
+        local data = messages[index]
+
+        if data then
+            displayBotMessage(
+                data[1],
+                data[2]
+            )
+        end
+
+        index += 1
+
+        if index > #messages then
+            index = 1
+        end
+
+    end
+
+end)
