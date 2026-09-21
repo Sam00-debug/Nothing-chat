@@ -1080,7 +1080,7 @@ task.spawn(function()
 end)
 
 local messages = {
-    {"[Staff] mommy", "join discord ,script will delete soon"},
+    
     {"[staff] miku", "discord join 🥺🥺🥺🥺🥺"},
     {"[staff] cutie", "what will you do if script delete, join discord"},
     {"[Staff] Sakura", "whoever uses discord and not in our discord is gay "},
