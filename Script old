@@ -978,7 +978,7 @@ end
 -- LOGIC: RECEIVING MESSAGES (POLLING)
 -- ==========================================
 local function pollMessages()
-    while isPolling and task.wait(0.5) do
+    while isPolling and task.wait(2) do
         local success, res = pcall(function()
             return req({
                 Url = SERVER_URL .. "/messages?since=" .. tostring(lastSyncTime),
